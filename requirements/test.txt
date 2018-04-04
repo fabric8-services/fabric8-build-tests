@@ -1,0 +1,4 @@
+# requirements for running tests
+tox>=2.3.1,<2.4.0
+detox>=0.11.0,<0.12.0
+coverage>=4.1,<5.0

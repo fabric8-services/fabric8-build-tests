@@ -1,0 +1,3 @@
+# requirements are split into dev and test
+-r requirements/dev.txt
+-r requirements/test.txt
