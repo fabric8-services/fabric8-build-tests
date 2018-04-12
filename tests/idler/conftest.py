@@ -1,7 +1,9 @@
 import pytest
 import os
+import json
 from jq import jq
 import subprocess
+
 
 def pytest_addoption(parser):
     parser.addoption("--osio-url", action="store",
@@ -51,42 +53,58 @@ class OpenshiftClient:
     def __init__(self, openshift_url, openshift_token):
         self.openshift_url = openshift_url
         self.openshift_token = openshift_token
-        self._jenkins_project = ''
+        self._project = ''
 
-    def run(self, sub_command, json=True):
-        #  self.login()
+    def run(self, command, json=True):
+        oc_parts = ['oc']
 
-        output_format = '-o=json' if json else ''
-        cmd = [
-            'oc',
+        if self._project:
+            oc_parts += ['-n=' + self._project]
+
+        subcmd_parts = command.split(' ')
+        if json:
+            subcmd_parts += ['-o=json']
+
+        # safe cmd must not have any secrets
+        safe_cmd = ' '.join([*oc_parts, *subcmd_parts])
+
+        secrets = [
             '--server=' + self.openshift_url,
             '--token=' + self.openshift_token,
-            *sub_command.split(' '),
-            output_format
         ]
 
-        print("Running command: oc " + sub_command)
-        proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        cmd = [*oc_parts, *secrets, *subcmd_parts]
 
+        print("Running: ", safe_cmd)
+        # TODO(sthaha):delme
+        #  __import__('ipdb').set_trace()
+        proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         if proc.returncode != 0:
-            raise "Failed to execute oc " + sub_command
+            raise RuntimeError("Failed to execute: " + safe_cmd)
 
         return str(proc.stdout, 'utf-8')
 
     @property
-    def projects(self):
+    def project_names(self):
         ret = self.run('get projects')
-        return jq('.items[].metadata.name').transform(text=ret, multiple_output=True)
+        return jq('.items[].metadata.name').transform(
+            text=ret, multiple_output=True)
 
     @property
-    def jenkins_project(self):
-        if self._jenkins_project:
-            return self._jenkins_project
+    def project(self):
+        """returns current project name"""
+        if not self._project:
+            self._project = self.run('project -q', json=False).strip()
+        return self._project
 
-        ret = self.run('get projects')
-        query = '.items[].metadata.name|select(endswith("-jenkins"))'
-        self._jenkins_project = jq(query).transform(text=ret)
-        return self._jenkins_project
+    @project.setter
+    def project(self, v):
+        self._project = v
+
+    @property
+    def pods(self):
+        """Returns a dict/json representation of pods running in current project """
+        return json.loads(self.run('get pods'))
 
 
 @pytest.fixture
@@ -94,7 +112,6 @@ def oc(openshift_url, openshift_token):
     client = OpenshiftClient(openshift_url, openshift_token)
     return client
 
-
 @pytest.fixture
 def jenkins(oc):
-    return Jenkins('req', oc)
+    return Jenkins(oc)
