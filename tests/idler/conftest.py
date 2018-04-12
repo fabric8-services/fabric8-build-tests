@@ -56,6 +56,11 @@ class OpenshiftClient:
         self._project = ''
 
     def run(self, command, json=True):
+        """
+        run takes in a oc sub command, executes it and
+        returns the output as a String
+        """
+
         oc_parts = ['oc']
 
         if self._project:
@@ -67,6 +72,7 @@ class OpenshiftClient:
 
         # safe cmd must not have any secrets
         safe_cmd = ' '.join([*oc_parts, *subcmd_parts])
+        print("Running: ", safe_cmd)
 
         secrets = [
             '--server=' + self.openshift_url,
@@ -74,10 +80,6 @@ class OpenshiftClient:
         ]
 
         cmd = [*oc_parts, *secrets, *subcmd_parts]
-
-        print("Running: ", safe_cmd)
-        # TODO(sthaha):delme
-        #  __import__('ipdb').set_trace()
         proc = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         if proc.returncode != 0:
             raise RuntimeError("Failed to execute: " + safe_cmd)
